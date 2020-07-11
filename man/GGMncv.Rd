@@ -7,17 +7,19 @@
 GGMncv(
   x,
   n,
+  penalty = "atan",
+  ic = "bic",
   lambda = NULL,
   n_lambda = 50,
   gamma = NULL,
   select = FALSE,
   L0_learn = FALSE,
-  penalty = "atan",
   refit = FALSE,
-  LLA = FALSE,
+  LLA = TRUE,
+  initial = "sicm",
   method = "pearson",
   progress = TRUE,
-  store = FALSE,
+  store = TRUE,
   vip = FALSE,
   vip_iter = 1000,
   ...
@@ -28,6 +30,15 @@ GGMncv(
 \code{p} by \code{p} correlation matrix.}
 
 \item{n}{Numeric. Sample size.}
+
+\item{penalty}{Character string. Which penalty should be used (defaults to \code{atan}).}
+
+\item{ic}{Character string. Which information criterion should be used (defaults to \code{bic}), give
+\code{select = TRUE}. The options include \code{aic}, \code{ebic}
+(ebic_gamma defaults to \code{0.5}; see details), \code{ric},
+or any generalized information criterion provided in section 5 of
+\insertCite{kim2012consistent;textual}{GGMncv}.
+The options are \code{gic_1} (i.e., \code{bic}) to \code{gic_7}.}
 
 \item{lambda}{Numeric. Tuning parameter governing the degrees of penalization. Defaults to
 \code{NULL} which results in fixing lambda to \code{sqrt(log(p)/n)}.}
@@ -43,14 +54,18 @@ which is the recommended value for the default penalty (see details).}
 \item{L0_learn}{Logical. Should lambda be selected based on the non-regularized
 precision matrix (defaults to \code{FALSE}; see details).}
 
-\item{penalty}{Character string. Which penalty should be used (defaults to \code{atan}).}
-
 \item{refit}{Logical. Should the precision matrix be refitted, given the adjacency matrix
 (defaults to \code{FALSE})? When set to \code{TRUE}, this provides the \strong{non-regularized},
 maximum likelihood estimate with constraints.}
 
 \item{LLA}{Logical. Should the local linear approximation be used for maximizing the penalized likelihood ?
-The default is \code{FALSE} (see details).}
+The default is \code{TRUE} (see details). Setting to \code{FALSE} results in the so-called
+one-step approach.}
+
+\item{initial}{Character string. Which initial values should be used for the one-step approach
+(i.e., \code{LLA = FALSE}) ? Default is the sample inverse
+covariance matrix (\code{sicm}). Options include \code{sicm} and \code{lw}
+\insertCite{@Ledoit and Wolf shrinkage estimator; @ledoit2004well}{GGMncv}.}
 
 \item{method}{Character string. Which correlation coefficient should be computed.
 One of "pearson" (default), "spearman", or  "polychoric".}
@@ -101,13 +116,23 @@ L0 approximations:
 
 \item Log: \code{penalty = "log"} \insertCite{mazumder2011sparsenet}{GGMncv}.
 
+\item Sica: \code{penalty = "sica"}  \insertCite{lv2009unified}{GGMncv}
+
+}
+
+Additional penalties:
+
+\itemize{
+
 \item SCAD: \code{penalty = "scad"}  \insertCite{fan2001variable}{GGMncv}.
 
 \item MCP: \code{penalty = "mcp"} \insertCite{zhang2010nearly}{GGMncv}.
 
-}
+\item Adaptive lasso \code{penalty = "adapt"}  \insertCite{zou2006adaptive}{GGMncv}
 
-Also note that lasso can be used (\code{penalty = "lasso"}).
+\item Lasso  \code{penalty = "lasso"}  \insertCite{tibshirani1996regression}{GGMncv}
+
+}
 
 \strong{Gamma}
 
@@ -136,11 +161,14 @@ Note that this is most useful in datasets that have more nodes than variables
 (i.e., low-dimensional).
 
 \strong{LLA}
-The local linear approximate is for non-covex penalties is described in \insertCite{fan2009network}{GGMncv}.
-This is essentially a weighted (g)lasso. Note that by default \code{LLA = FALSE}. This is due to the
-work of \insertCite{zou2008one}{GGMncv}, which suggested that, so long as the starting values are good,
-then it is possible to use a one-step estimator. In the case of low-dimensional data , the sample based
-inverse covariance matrix is used to compute the lambda matrix. This is expected to work well, assuming
+
+The local linear approximate is for non-covex penalties is described in
+\insertCite{fan2009network}{GGMncv}. This is essentially a weighted (g)lasso.
+Note that by default \code{LLA = TRUE}. This can be set to \code{FALSE} when \emph{n} is
+much larger than \emph{p} (e.g., this can improve power). This is due to the work
+of \insertCite{zou2008one}{GGMncv}, which suggested that, so long as the starting
+values are good, then it is possible to use a one-step estimator. In the case of low-dimensional data,
+the sample based inverse covariance matrix is used to compute the lambda matrix. This is expected to work well, assuming
 that \emph{n} is sufficiently larger than \emph{p}. For high-dimensional data, the initial values for obtaining
 the lambda matrix are obtained from glasso.
 
@@ -149,15 +177,24 @@ the lambda matrix are obtained from glasso.
 It is common to select lambda. However, in more recent approaches (see references above), lambda is fixed to
 \code{sqrt(log(p)/n)}. This has the advantage of being tuning free and this value is expected
 to provide competitive performance. It is possible to select lambda by setting \code{select = TRUE}.
+
+\strong{EBIC}
+
+When setting \code{ic = "ebic"}, the additional parameter that determines the additional penalty to BIC is
+passed via the \code{...} argument. This must be specificed as \code{ebic_gamma = 1}, with the default set
+to \code{0.5}.
 }
 \examples{
 # data
-Y <- GGMncv::ptsd
+Y <- GGMncv::ptsd[,1:10]
 
 S <- cor(Y)
 
 # fit model
 fit <- GGMncv(S, n = nrow(Y))
+
+# plot
+qgraph::qgraph(fit$P)
 }
 \references{
 \insertAllCited{}

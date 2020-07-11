@@ -7,6 +7,15 @@
 #'
 #' @param n Numeric. Sample size.
 #'
+#' @param penalty Character string. Which penalty should be used (defaults to \code{atan}).
+#'
+#' @param ic Character string. Which information criterion should be used (defaults to \code{bic}), give
+#'           \code{select = TRUE}. The options include \code{aic}, \code{ebic}
+#'           (ebic_gamma defaults to \code{0.5}; see details), \code{ric},
+#'           or any generalized information criterion provided in section 5 of
+#'           \insertCite{kim2012consistent;textual}{GGMncv}.
+#'           The options are \code{gic_1} (i.e., \code{bic}) to \code{gic_7}.
+#'
 #' @param lambda Numeric. Tuning parameter governing the degrees of penalization. Defaults to
 #'               \code{NULL} which results in fixing lambda to \code{sqrt(log(p)/n)}.
 #'
@@ -21,14 +30,18 @@
 #' @param L0_learn Logical. Should lambda be selected based on the non-regularized
 #'                 precision matrix (defaults to \code{FALSE}; see details).
 #'
-#' @param penalty Character string. Which penalty should be used (defaults to \code{atan}).
-#'
 #' @param refit Logical. Should the precision matrix be refitted, given the adjacency matrix
 #'               (defaults to \code{FALSE})? When set to \code{TRUE}, this provides the \strong{non-regularized},
 #'               maximum likelihood estimate with constraints.
 #'
 #' @param LLA Logical. Should the local linear approximation be used for maximizing the penalized likelihood ?
-#'            The default is \code{FALSE} (see details).
+#'            The default is \code{TRUE} (see details). Setting to \code{FALSE} results in the so-called
+#'            one-step approach.
+#'
+#' @param initial Character string. Which initial values should be used for the one-step approach
+#'                (i.e., \code{LLA = FALSE}) ? Default is the sample inverse
+#'                covariance matrix (\code{sicm}). Options include \code{sicm} and \code{lw}
+#'                \insertCite{@Ledoit and Wolf shrinkage estimator; @ledoit2004well}{GGMncv}.
 #'
 #' @param method Character string. Which correlation coefficient should be computed.
 #'               One of "pearson" (default), "spearman", or  "polychoric".
@@ -83,13 +96,23 @@
 #'
 #' \item Log: \code{penalty = "log"} \insertCite{mazumder2011sparsenet}{GGMncv}.
 #'
+#' \item Sica: \code{penalty = "sica"}  \insertCite{lv2009unified}{GGMncv}
+#'
+#' }
+#'
+#' Additional penalties:
+#'
+#' \itemize{
+#'
 #' \item SCAD: \code{penalty = "scad"}  \insertCite{fan2001variable}{GGMncv}.
 #'
 #' \item MCP: \code{penalty = "mcp"} \insertCite{zhang2010nearly}{GGMncv}.
 #'
-#' }
+#' \item Adaptive lasso \code{penalty = "adapt"}  \insertCite{zou2006adaptive}{GGMncv}
 #'
-#' Also note that lasso can be used (\code{penalty = "lasso"}).
+#' \item Lasso  \code{penalty = "lasso"}  \insertCite{tibshirani1996regression}{GGMncv}
+#'
+#' }
 #'
 #' \strong{Gamma}
 #'
@@ -118,11 +141,14 @@
 #' (i.e., low-dimensional).
 #'
 #' \strong{LLA}
-#' The local linear approximate is for non-covex penalties is described in \insertCite{fan2009network}{GGMncv}.
-#' This is essentially a weighted (g)lasso. Note that by default \code{LLA = FALSE}. This is due to the
-#' work of \insertCite{zou2008one}{GGMncv}, which suggested that, so long as the starting values are good,
-#' then it is possible to use a one-step estimator. In the case of low-dimensional data , the sample based
-#' inverse covariance matrix is used to compute the lambda matrix. This is expected to work well, assuming
+#'
+#' The local linear approximate is for non-covex penalties is described in
+#' \insertCite{fan2009network}{GGMncv}. This is essentially a weighted (g)lasso.
+#' Note that by default \code{LLA = TRUE}. This can be set to \code{FALSE} when \emph{n} is
+#' much larger than \emph{p} (e.g., this can improve power). This is due to the work
+#' of \insertCite{zou2008one}{GGMncv}, which suggested that, so long as the starting
+#' values are good, then it is possible to use a one-step estimator. In the case of low-dimensional data,
+#' the sample based inverse covariance matrix is used to compute the lambda matrix. This is expected to work well, assuming
 #' that \emph{n} is sufficiently larger than \emph{p}. For high-dimensional data, the initial values for obtaining
 #' the lambda matrix are obtained from glasso.
 #'
@@ -132,27 +158,38 @@
 #' \code{sqrt(log(p)/n)}. This has the advantage of being tuning free and this value is expected
 #' to provide competitive performance. It is possible to select lambda by setting \code{select = TRUE}.
 #'
+#' \strong{EBIC}
+#'
+#' When setting \code{ic = "ebic"}, the additional parameter that determines the additional penalty to BIC is
+#' passed via the \code{...} argument. This must be specificed as \code{ebic_gamma = 1}, with the default set
+#' to \code{0.5}.
+#'
 #' @examples
 #' # data
-#' Y <- GGMncv::ptsd
+#' Y <- GGMncv::ptsd[,1:10]
 #'
 #' S <- cor(Y)
 #'
 #' # fit model
 #' fit <- GGMncv(S, n = nrow(Y))
+#'
+#' # plot
+#' qgraph::qgraph(fit$P)
 #' @export
 GGMncv <- function(x, n,
+                   penalty = "atan",
+                   ic = "bic",
                    lambda = NULL,
                    n_lambda = 50,
                    gamma = NULL,
                    select = FALSE,
                    L0_learn = FALSE,
-                   penalty = "atan",
                    refit = FALSE,
-                   LLA = FALSE,
+                   LLA = TRUE,
+                   initial = "sicm",
                    method = "pearson",
                    progress = TRUE,
-                   store = FALSE,
+                   store = TRUE,
                    vip = FALSE,
                    vip_iter = 1000,
                    ...){
@@ -165,7 +202,8 @@ GGMncv <- function(x, n,
                       "log",
                       "lasso",
                       "sica",
-                      "lq")){
+                      "lq",
+                      "adapt")){
     stop("penalty not found. \ncurrent options: atan, mcp, scad, exp, selo, or log")
   }
 
@@ -174,13 +212,13 @@ GGMncv <- function(x, n,
     R <- x
   } else {
     if (method == "polychoric") {
-    suppressWarnings(
+      suppressWarnings(
       R <- psych::polychoric(x)$rho
-    )
+      )
     } else {
       R <- stats::cor(x, method = method)
-      }
-  }
+    }
+    }
 
   # nodes
   p <- ncol(R)
@@ -192,25 +230,31 @@ GGMncv <- function(x, n,
     # tuning
     lambda_no_select <- sqrt(log(p)/n)
   } else {
-      lambda_no_select <- lambda
+    lambda_no_select <- lambda
     }
 
-
   if(is.null(gamma)) {
-    if(penalty == "scad") {
+    if (penalty == "scad") {
       gamma <- 3.7
     } else if (penalty == "mcp") {
       gamma <- 3
-
+    } else if (penalty == "adapt") {
+      gamma <- 0.5
     } else {
-      gamma <- 0.1
-      }
+      gamma <- 0.01
     }
+  }
 
   # high dimensional ?
   if(n > p){
     # inverse covariance matrix
-    Theta <- solve(R)
+    if(initial == "sicm"){
+      Theta <- solve(R)
+    } else if (initial == "lw"){
+      Theta <- lw_helper(x, n)
+    } else {
+        stop("initial not supported. must be 'sicm' or 'lw'.")
+      }
   } else {
     Theta <- glassoFast::glassoFast(R,  rho = lambda_no_select)$wi
   }
@@ -316,15 +360,20 @@ GGMncv <- function(x, n,
                                max_iter = 10)$Theta
 
       } else {
-
         Theta <- fit$wi
       }
 
-      edges <- sum(adj[upper.tri(adj)] != 0)
-      log.like <- (n/2) * (log(det(Theta)) - sum(diag(R%*%Theta)))
-      bic <- -2 * log.like +  edges * log(n)
-      fit$bic <- bic
-      fit$lambda <- lambda[i]
+       edges <- sum(adj[upper.tri(adj)] != 0)
+
+       fit$ic <- gic_helper(Theta = Theta,
+                             R = R,
+                             edges = edges,
+                             n = n,
+                             p = p,
+                             type = ic,
+                             ...)
+
+       fit$lambda <- lambda[i]
 
       if(progress){
         utils::setTxtProgressBar(pb, i)
@@ -332,17 +381,13 @@ GGMncv <- function(x, n,
       fit
     })
 
-   fit <-  fits[[which.min(  sapply(fits, "[[", "bic"))]]
+   fit <-  fits[[which.min(  sapply(fits, "[[", "ic"))]]
 
    if(store){
      fitted_models <- fits
-
-   } else {
-
-     fitted_models <- NULL
-
-   }
-
+     } else {
+       fitted_models <- NULL
+     }
    }
 
   adj <- ifelse(fit$wi == 0, 0, 1)
@@ -413,7 +458,11 @@ GGMncv <- function(x, n,
                           adj = adj,
                           lambda = lambda,
                           vip_results = vip_results,
-                          fitted_models = fitted_models)
+                          fitted_models = fitted_models,
+                          penalty = penalty,
+                          x = x,
+                          R = R,
+                          n = n)
 
   class(returned_object) <- c("ggmncv", "default")
   return(returned_object)
@@ -440,25 +489,44 @@ print.ggmncv <- function(x,...){
     print_coef(x,...)
   }
 
+  if(methods::is(x, "inference")){
+    print_inference(x, ...)
+  }
+
+  if(methods::is(x, "ggm_compare")){
+    print_compare(x,...)
+  }
+
 }
 
 
 
 #' Plot \code{ggmncv} Objects
 #'
-#' @description Plot variable inclusion 'probabilities'
+#' @description Plot the solution path for the partial correlations, the information criterion solution path, or
+#' the variable inclusion 'probabilities'.
 #'
 #' @param x An object of class \code{ggmncv}
 #'
-#' @param size Numeric. The size of the points (defaults to 1).
+#' @param type Character string. Which type should be plotted ? Options included
+#' \code{pcor_path}, \code{ic_path}, or \code{vip}.
 #'
-#' @param color Character string. The color of the points (defaults to \code{black})
+#' @param size Numeric. The size of the points (\code{vip})  or lines (\code{pcor_path} or \code{ic_path})
+#' The default is \code{1}.
+#'
+#' @param color Character string. The color of the points (\code{vip})  or lines
+#' (\code{pcor_path} or \code{ic_path}). The default is \code{black}.
+#'
+#' @param alpha Numeric. The transparency of the lines. Only for the solution path options.
 #'
 #' @param ... Currently ignored.
 #'
 #' @return A \code{ggplot} object
 #'
-#' @importFrom  ggplot2 aes ggplot  geom_point ylab
+#' @importFrom  ggplot2 aes ggplot  geom_point ylab facet_grid geom_line
+#' geom_vline geom_hline xlab ylab ggtitle theme element_text
+#'
+#' @importFrom reshape melt
 #'
 #' @examples
 #'
@@ -475,31 +543,132 @@ print.ggmncv <- function(x,...){
 #'               vip_iter = 50)
 #'
 #' # plot
-#' plot(fit, size = 4)
+#' plot(fit, size = 4, type = "vip")
 #'
 #' @export
 plot.ggmncv <- function(x,
+                        type = "pcor_path",
                         size = 1,
+                        alpha = 0.5,
                         color = "black",
                         ...){
-  if(is.null(x$vip_results)){
-    stop("variable inclusion 'probabilities' not found (set vip = TRUE)")
+
+  if(type == "pcor_path"){
+
+    n_lambda <-  length(x$lambda)
+
+    if(n_lambda == 0) {
+      stop("solution path not found. must set 'select = TRUE'")
+    }
+
+
+    p <- ncol(x$Theta)
+    which_min <- which.min(sapply(x$fitted_models, "[[", "ic"))
+    lambda_min <- x$lambda[which_min]
+
+
+
+    Theta_std <- t(sapply(1:n_lambda, function(i)
+
+      cov2cor(x$fitted_models[[i]]$wi)[upper.tri(diag(p))]))
+
+    non_zero <- sum(Theta_std[which_min,] !=0)
+    dat_res <-  reshape::melt(Theta_std)
+    dat_res$X1 <- round(x$lambda, 3)
+    dat_res$penalty <- x$penalty
+
+    plt <- ggplot(dat_res, aes(y = -value,
+                               x = X1,
+                               group = as.factor(X2),
+                               color = as.factor(X2))) +
+      facet_grid(~ penalty) +
+
+      geom_line(show.legend = FALSE, size = size,
+                alpha = alpha) +
+      geom_vline(xintercept = lambda_min,
+                 linetype = "dotted",
+                 size = 1,
+                 alpha = 0.75) +
+      geom_hline(yintercept = 0,  color = "black") +
+      xlab(expression(lambda)) +
+      ylab(expression(hat(rho))) +
+      ggtitle(paste0(non_zero, " edges (",
+                     round(non_zero /  p*(p-1)*.5),
+                     "% connectivity)")) +
+      theme(axis.title  = element_text(size = 12),
+            strip.text = element_text(size = 12))
+
+
+  } else if (type == "ic_path"){
+    n_lambda <-  length(x$lambda)
+
+    if(n_lambda == 0) {
+      stop("solution path not found. must set 'select = TRUE'")
+    }
+
+
+
+    n_lambda <-  length(x$lambda)
+    p <- ncol(x$Theta)
+    which_min <- which.min(sapply(x$fitted_models, "[[", "ic"))
+    lambda_min <- x$lambda[which_min]
+
+
+    non_zero <- sum(x$adj[upper.tri(x$adj)] !=0)
+
+    dat_res <- data.frame(ic = sapply(x$fitted_models, "[[", "ic"),
+                          lambda = x$lambda)
+    dat_res$penalty <- x$penalty
+
+    plt <- ggplot(dat_res, aes(y = ic, x = lambda)) +
+      geom_line(size = size) +
+      geom_vline(xintercept = lambda_min,
+                 linetype = "dotted",
+                 size = 1,
+                 alpha = 0.75) +
+      facet_grid(~ penalty) +
+      xlab(expression(lambda)) +
+      ylab("IC") +
+      ggtitle(paste0(non_zero, " edges (",
+                     round(non_zero /  p*(p-1)*.5),
+                     "% connectivity)")) +
+      theme(axis.title  = element_text(size = 12),
+            strip.text = element_text(size = 12))
+
+
+  }  else if(type == "vip"){
+
+    if(is.null(x$vip_results)){
+      stop("variable inclusion 'probabilities' not found (set vip = TRUE)")
+    }
+
+    dat <- x$vip_results[order(x$vip_results$VIP),]
+
+    dat$new1 <- factor(dat$Relation,
+                       levels = dat$Relation,
+                       labels = dat$Relation)
+
+    dat$penalty <- x$penalty
+
+    plt <- ggplot(dat,aes(y= new1,
+                          x = VIP,
+                          group = new1)) +
+      facet_grid(~ penalty) +
+      geom_point(size = size,
+                 color = color)  +
+      ylab("Relation") +
+      theme(axis.title  = element_text(size = 12),
+            strip.text = element_text(size = 12))
+
+  } else {
+    stop("type not supported. must be 'pcor_path', 'ic_path', or 'vip'")
   }
 
-  dat <- x$vip_results[order(x$vip_results$VIP),]
-
-  dat$new1 <- factor(dat$Relation,
-                     levels = dat$Relation,
-                     labels = dat$Relation)
-
-  ggplot(dat,aes(y= new1,
-                 x = VIP,
-                 group = new1)) +
-    geom_point(size = size,
-               color = color)  +
-    ylab("Relation")
-
+  return(plt)
 }
+
+
+
 
 print_ggmncv <- function(x, ...){
   mat <- round(x$P, 3)

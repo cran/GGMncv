@@ -1,5 +1,6 @@
 #' @importFrom numDeriv grad
 #' @importFrom Rcpp sourceCpp
+#' @importFrom MASS mvrnorm
 #' @useDynLib GGMncv, .registration=TRUE
 
 # Fan, J., & Li, R. (2001). Variable selection via nonconcave penalized likelihood and
@@ -20,13 +21,13 @@ scad_pen <- function(Theta, lambda, gamma = 3.7){
 
 # Wang, Y., & Zhu, L. (2016). Variable selection and parameter estimation
 # with the Atan regularization method. Journal of Probability and Statistics, 2016.
-atan_deriv <- function(Theta, lambda, gamma = 0.1){
+atan_deriv <- function(Theta, lambda, gamma = 0.01){
   Theta <- abs(Theta)
   lambda_mat <- lambda * ((gamma * (gamma + 2/pi)) / (gamma^2 + Theta^2))
   return(lambda_mat)
 }
 
-atan_pen <- function(Theta, lambda, gamma = 0.1){
+atan_pen <- function(Theta, lambda, gamma = 0.01){
   Theta <- abs(Theta)
   pen_mat <- lambda * (gamma + 2/pi) * atan(Theta/gamma)
   return(pen_mat)
@@ -34,13 +35,13 @@ atan_pen <- function(Theta, lambda, gamma = 0.1){
 
 # Dicker, L., Huang, B., & Lin, X. (2013). Variable selection and estimation
 # with the seamless-L0 penalty. Statistica Sinica, 929-962.
-selo_pen <- function(Theta, lambda, gamma = 0.1) {
+selo_pen <- function(Theta, lambda, gamma = 0.01) {
   Theta <- abs(Theta)
   pen_mat <- (lambda / log(2)) * log((Theta / (Theta + gamma)) + 1)
   return(pen_mat)
 }
 
-selo_deriv <- function(Theta, lambda, gamma = 0.1){
+selo_deriv <- function(Theta, lambda, gamma = 0.01){
   p <- ncol(Theta)
   Theta <- abs(Theta)
   Theta <- ifelse(Theta == 0, 1e-5, Theta)
@@ -66,7 +67,7 @@ mcp_pen <- function(Theta, lambda, gamma = 3){
 # Wang, Y., Fan, Q., & Zhu, L. (2018). Variable selection and estimation using a
 # continuous approximation to the $$ L_0 $$ penalty. Annals of the
 # Institute of Statistical Mathematics, 70(1), 191-214.
-exp_deriv <- function(Theta, lambda, gamma = 0.1){
+exp_deriv <- function(Theta, lambda, gamma = 0.01){
   Theta <- abs(Theta)
   lambda_mat <- (lambda/gamma) * exp(-(Theta/gamma))
   return(lambda_mat)
@@ -76,12 +77,12 @@ exp_deriv <- function(Theta, lambda, gamma = 0.1){
 # with nonconvex penalties. Journal of the American Statistical Association, 106(495), 1125-1138.
 log_pen <- function(x, lambda, gamma){
   gamma <- 1/gamma
-  inv <- abs(inv)
+  inv <- abs(x + 0.0001)
   pen_mat <- ((lambda / log(gamma+ 1)) * log(gamma * inv + 1))
   return(pen_mat)
 }
 
-log_deriv <- function(Theta, lambda, gamma = 0.1){
+log_deriv <- function(Theta, lambda, gamma = 0.01){
   p <- ncol(Theta)
   Theta <- abs(Theta)
   lambda_mat <- matrix(numDeriv::grad(log_pen, x = Theta, lambda = lambda, gamma = gamma), p, p)
@@ -105,21 +106,68 @@ lq_deriv <- function(Theta, lambda, gamma = 0.5){
 # regularized least squares. The Annals of Statistics, 37(6A), 3498-3528.
 sica_pen <- function(x, lambda, gamma){
   Theta <- x
-  Theta <- abs(Theta)
+  Theta <- abs(Theta + 0.0001)
   pen_mat <- lambda * (((gamma + 1) * Theta) /(Theta+gamma))
   return(pen_mat)
 }
 
-sica_deriv <- function(Theta, lambda, gamma = 0.1){
+sica_deriv <- function(Theta, lambda, gamma = 0.01){
   p <- ncol(Theta)
   Theta <- abs(Theta)
   lambda_mat <- matrix(numDeriv::grad(sica_pen, x = Theta, lambda = lambda, gamma = gamma), p, p)
   return(lambda_mat)
 }
 
+# Zou, H. (2006). The adaptive lasso and its oracle properties. Journal of the American
+# statistical association, 101(476), 1418-1429.
+adapt_deriv <- function(Theta, lambda, gamma = 0.5){
+  Theta <- abs(Theta + 0.0001)
+  # note: 1-gamma for consistency (-> 0 large weight)
+  lambda_mat <- lambda * Theta^(-(1-gamma))
+  return(lambda_mat)
+}
 
 
+# Kim, Y., Kwon, S., & Choi, H. (2012). Consistent model selection criteria on high
+# dimensions. The Journal of Machine Learning Research, 13, 1037-1057.
+gic_helper <- function(Theta, R, edges, n, p, type = "bic", ...) {
+  log.like <- (n / 2) * (log(det(Theta)) - sum(diag(R %*% Theta)))
 
+  neg_ll <- -2 * log.like
+
+  if (type == "bic" | type == "gic_1") {
+    ic <- neg_ll + edges * log(n)
+  } else if (type == "aic") {
+    ic <- neg_ll + edges * 2
+  } else if (type == "gic_2") {
+    ic <- neg_ll + edges * p ^ (1 / 3)
+  } else if (type == "ric" | type == "gic_3") {
+    ic <- neg_ll + edges * 2 * log(p)
+  } else if (type == "gic_4") {
+    ic <- neg_ll + edges * 2 * (log(p) + log(log(p)))
+  } else if (type == "gic_5") {
+    ic <- neg_ll + edges * log(log(n)) * log(p)
+  } else if (type == "gic_6") {
+    ic <- neg_ll + edges * log(n) * log(p)
+  } else if (type == "ebic") {
+    dots <- list(...)
+    if (is.null(dots$ebic_gamma)) {
+      gamma <- 0.5
+    } else {
+      gamma <- dots$ebic_gamma
+    }
+    ic <- neg_ll + edges * log(n) + 4 * edges * gamma * log(p)
+  } else {
+    stop("ic not found. see documentation")
+  }
+
+  return(ic)
+
+}
+
+
+# note this is implemented in c++ for speed.
+# This is for testing purposes
 htf <- function(Sigma, adj, tol = 1e-10) {
   S <- Sigma
   p <- ncol(S)
@@ -162,4 +210,107 @@ coef_helper <- function(Theta){
   return(betas)
 }
 
-globalVariables(c("VIP", "new1", "Y", "cs"))
+
+
+# taken from
+# Kuismin, M., & Sillanpää, M. J. (2016). Use of Wishart prior and simple extensions for
+# sparse precision matrix estimation. PloS one, 11(2), e0148171.
+lw_helper <- function(x, n){
+
+  p <- ncol(x)
+
+  if (isSymmetric(as.matrix(x))) {
+
+    Y <- MASS::mvrnorm(
+      n = n,
+      mu = rep(0, p),
+      Sigma = x,
+      empirical = TRUE
+    )
+
+  } else {
+
+    Y <- x
+  }
+  # Y (n x p)    : n iid observations on p random variables
+  # Sigma (p x p): invertible covariance matrix estimator
+  #
+  # Shrinks towards one-parameter matrix:
+  #    all variances are the same
+  #    all covariances are zero
+
+  # Modified from the MATLAB-code downloaded from the website of Michael Wolf in the Department of Economics of the University of Zurich.
+  # Based on the presentation in the article of Ledoit & Wolf (2004): "Honey, I Shrunk The Sample Covariance Matrix". The Journal of Portfolio Management Summer, Vol. 30, No. 4, 110-119.
+
+  # This version: 2/2015
+
+  ############################################################################
+
+  # This file is released under the BSD 2-clause license.
+
+  # Copyright (c) 2014, Olivier Ledoit and Michael Wolf
+  # All rights reserved.
+
+  # Redistribution and use in source and binary forms, with or without
+  # modification, are permitted provided that the following conditions are
+  # met:
+
+  # 1. Redistributions of source code must retain the above copyright notice,
+  # this list of conditions and the following disclaimer.
+
+  # 2. Redistributions in binary form must reproduce the above copyright
+  # notice, this list of conditions and the following disclaimer in the
+  # documentation and/or other materials provided with the distribution.
+
+  # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+  # IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+  # THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+  # PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+  # CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+  # EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+  # PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+  # PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+  # LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+  # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+  # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+  ##############################################################################
+  # de-mean returns
+
+  Y <- scale(Y, scale = FALSE)
+
+  # compute S covariance matrix
+  S <- crossprod(Y)/n
+
+  # compute prior
+
+  meanvar <- mean(diag(S))
+  prior <- meanvar*diag(1,p)
+
+  # what we call b
+  X <- Y^2
+  phiMat <- (crossprod(X)/n) - S^2
+  phi <- sum(phiMat)
+
+  # what we call c
+  gamma = sum(abs(S-prior)^2)
+
+  # compute shrinkage constant
+  kappa <- phi/gamma
+  shrinkage <- max(0,min(1,kappa/n))
+
+  Sigma <- shrinkage*prior+(1-shrinkage)*S
+  Theta <- solve(cov2cor(Sigma))
+  return(Theta)
+
+}
+
+globalVariables(c("VIP",
+                  "new1",
+                  "Y",
+                  "cs",
+                  "value",
+                  "X1",
+                  "X2",
+                  "ic",
+                  "lambda",
+                  "coef"))
