@@ -4,21 +4,14 @@
 \alias{plot.ggmncv}
 \title{Plot \code{ggmncv} Objects}
 \usage{
-\method{plot}{ggmncv}(x, type = "pcor_path", size = 1, alpha = 0.5, color = "black", ...)
+\method{plot}{ggmncv}(x, size = 1, alpha = 0.5, ...)
 }
 \arguments{
 \item{x}{An object of class \code{ggmncv}}
 
-\item{type}{Character string. Which type should be plotted ? Options included
-\code{pcor_path}, \code{ic_path}, or \code{vip}.}
-
-\item{size}{Numeric. The size of the points (\code{vip})  or lines (\code{pcor_path} or \code{ic_path})
-The default is \code{1}.}
+\item{size}{Numeric. The size of the points (\code{eip}).}
 
 \item{alpha}{Numeric. The transparency of the lines. Only for the solution path options.}
-
-\item{color}{Character string. The color of the points (\code{vip})  or lines
-(\code{pcor_path} or \code{ic_path}). The default is \code{black}.}
 
 \item{...}{Currently ignored.}
 }
@@ -26,8 +19,7 @@ The default is \code{1}.}
 A \code{ggplot} object
 }
 \description{
-Plot the solution path for the partial correlations, the information criterion solution path, or
-the variable inclusion 'probabilities'.
+Plot the solution path for the partial correlations.
 }
 \examples{
 
@@ -38,12 +30,9 @@ Y <- GGMncv::ptsd[,1:10]
 S <- cor(Y, method = "spearman")
 
 # fit model
-fit <- GGMncv(x = S, n = nrow(Y),
-              penalty = "atan",
-              vip = TRUE,
-              vip_iter = 50)
+fit <- ggmncv(R = S, n = nrow(Y))
 
 # plot
-plot(fit, size = 4, type = "vip")
+plot(fit)
 
 }
