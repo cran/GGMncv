@@ -2,6 +2,7 @@
 #' @importFrom Rcpp sourceCpp
 #' @importFrom MASS mvrnorm
 #' @importFrom stats deriv
+#' @importFrom utils head
 #' @useDynLib GGMncv, .registration=TRUE
 
 # Fan, J., & Li, R. (2001). Variable selection via nonconcave penalized likelihood and
@@ -142,7 +143,9 @@ adapt_deriv <- function(Theta, lambda, gamma = 0.5){
 
 # Kim, Y., Kwon, S., & Choi, H. (2012). Consistent model selection criteria on high
 # dimensions. The Journal of Machine Learning Research, 13, 1037-1057.
-gic_helper <- function(Theta, R, edges, n, p, type = "bic", ...) {
+gic_helper <- function(Theta, R, edges, n, p,
+                       type = "bic",
+                       ebic_gamma = ebic_gamma) {
   log.like <- (n / 2) * (log(det(Theta)) - sum(diag(R %*% Theta)))
 
   neg_ll <- -2 * log.like
@@ -162,19 +165,11 @@ gic_helper <- function(Theta, R, edges, n, p, type = "bic", ...) {
   } else if (type == "gic_6") {
     ic <- neg_ll + edges * log(n) * log(p)
   } else if (type == "ebic") {
-    dots <- list(...)
-    if (is.null(dots$ebic_gamma)) {
-      gamma <- 0.5
-    } else {
-      gamma <- dots$ebic_gamma
-    }
-    ic <- neg_ll + edges * log(n) + 4 * edges * gamma * log(p)
+    ic <- neg_ll + edges * log(n) + 4 * edges * ebic_gamma * log(p)
   } else {
     stop("ic not found. see documentation")
   }
-
   return(ic)
-
 }
 
 
@@ -212,13 +207,14 @@ htf <- function(Sigma, adj, tol = 1e-10) {
       n_iter <- n_iter + 1
     }
   }
-  returned_object <- list(Theta = round(solve(W), 4), Sigma = round(W, 4))
+  returned_object <- list(Theta = round(solve(W), 4),
+                          Sigma = round(W, 4))
   returned_object
 }
 
 coef_helper <- function(Theta){
   p <- ncol(Theta)
-  betas <- round(t(sapply(1:p, function(x) Theta[x,-x] / Theta[x,x])), 3)  * -1
+  betas <- -t(sapply(1:p, function(x) Theta[x,-x] / Theta[x,x]))
   return(betas)
 }
 
@@ -240,96 +236,21 @@ check_gamma <- function(penalty, gamma){
   }
 }
 
-# taken from
-# Kuismin, M., & Sillanpää, M. J. (2016). Use of Wishart prior and simple extensions for
-# sparse precision matrix estimation. PloS one, 11(2), e0148171.
-lw_helper <- function(x, n){
+symmetric_mat <- function (x) {
+  x[lower.tri(x)] <- t(x)[lower.tri(x)]
+  x
+}
 
-  p <- ncol(x)
+symm_mat <- function (x) {
+  x[lower.tri(x)] <- t(x)[lower.tri(x)]
+  x
+}
 
-  if (isSymmetric(as.matrix(x))) {
-
-    Y <- MASS::mvrnorm(
-      n = n,
-      mu = rep(0, p),
-      Sigma = x,
-      empirical = TRUE
-    )
-
-  } else {
-
-    Y <- x
-  }
-  # Y (n x p)    : n iid observations on p random variables
-  # Sigma (p x p): invertible covariance matrix estimator
-  #
-  # Shrinks towards one-parameter matrix:
-  #    all variances are the same
-  #    all covariances are zero
-
-  # Modified from the MATLAB-code downloaded from the website of Michael Wolf in the Department of Economics of the University of Zurich.
-  # Based on the presentation in the article of Ledoit & Wolf (2004): "Honey, I Shrunk The Sample Covariance Matrix". The Journal of Portfolio Management Summer, Vol. 30, No. 4, 110-119.
-
-  # This version: 2/2015
-
-  ############################################################################
-
-  # This file is released under the BSD 2-clause license.
-
-  # Copyright (c) 2014, Olivier Ledoit and Michael Wolf
-  # All rights reserved.
-
-  # Redistribution and use in source and binary forms, with or without
-  # modification, are permitted provided that the following conditions are
-  # met:
-
-  # 1. Redistributions of source code must retain the above copyright notice,
-  # this list of conditions and the following disclaimer.
-
-  # 2. Redistributions in binary form must reproduce the above copyright
-  # notice, this list of conditions and the following disclaimer in the
-  # documentation and/or other materials provided with the distribution.
-
-  # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
-  # IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
-  # THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-  # PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
-  # CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-  # EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-  # PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-  # PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-  # LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-  # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-  # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-  ##############################################################################
-  # de-mean returns
-
-  Y <- scale(Y, scale = FALSE)
-
-  # compute S covariance matrix
-  S <- crossprod(Y)/n
-
-  # compute prior
-
-  meanvar <- mean(diag(S))
-  prior <- meanvar*diag(1,p)
-
-  # what we call b
-  X <- Y^2
-  phiMat <- (crossprod(X)/n) - S^2
-  phi <- sum(phiMat)
-
-  # what we call c
-  gamma = sum(abs(S-prior)^2)
-
-  # compute shrinkage constant
-  kappa <- phi/gamma
-  shrinkage <- max(0,min(1,kappa/n))
-
-  Sigma <- shrinkage*prior+(1-shrinkage)*S
-  Theta <- solve(cov2cor(Sigma))
-  return(Theta)
-
+jsd <- function(Theta1, Theta2){
+  Theta1 <- cov2cor(Theta1)
+  Theta2 <- cov2cor(Theta2)
+  jsd <- (kl_mvn(Theta1, Theta2) +  kl_mvn(Theta2, Theta1)) / 2
+  return(jsd)
 }
 
 globalVariables(c("VIP",
@@ -345,4 +266,5 @@ globalVariables(c("VIP",
                   "EIP",
                   "dat",
                   "thetas",
-                  "pen"))
+                  "pen",
+                  "train_data"))

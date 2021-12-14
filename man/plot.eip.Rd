@@ -22,12 +22,16 @@ An object of class \code{ggplot}
 Plot Edge Inclusion 'Probabilities'
 }
 \examples{
+\donttest{
+
 # data
 Y <- GGMncv::ptsd[,1:10]
 
 # compute eip's
-boot_samps <- boot_eip(Y, B = 10)
+boot_samps <- boot_eip(Y, B = 10, progress = FALSE)
 
 
 plot(boot_samps)
+
+}
 }

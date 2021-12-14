@@ -1,7 +1,9 @@
-#' Statistical Inference for Gaussian Graphical Models
+#' Statistical Inference for Regularized Gaussian Graphical Models
 #'
-#' @description Compute p-values for each relation based on the de-sparsified precision matrix
-#' \insertCite{jankova2015confidence}{GGMncv}.
+#' @name inference
+#'
+#' @description Compute \emph{p}-values for each relation based on the
+#' de-sparsified glasso estimator \insertCite{jankova2015confidence}{GGMncv}.
 #'
 #' @param object  An object of class \code{ggmncv}
 #'
@@ -20,9 +22,9 @@
 #'
 #' \item \code{adj} Adjacency matrix based on the p-values.
 #'
-#' \item \code{uncorrected} Uncorrected p-values
+#' \item \code{pval_uncorrected} Uncorrected p-values
 #'
-#' \item \code{corrected} Corected p-values
+#' \item \code{pval_corrected} Corrected p-values
 #'
 #' \item \code{method} The approach used for multiple comparisons
 #'
@@ -32,23 +34,34 @@
 #' @importFrom stats p.adjust pnorm
 #'
 #' @note
-#' This assumes the Gaussian data.
+#' This assumes (reasonably) Gaussian data, and should not to be expected
+#' to work for, say, polychoric correlations. Further, all work to date
+#' has only looked at the graphical lasso estimator, and not de-sparsifying
+#' nonconvex regularization. Accordingly, it is probably best to set
+#' \code{penalty = "lasso"} in \code{\link{ggmncv}}.
+#'
+#' Further, whether the de-sparsified estimator provides nominal error rates
+#' remains to be seen, at least across a range of conditions. For example,
+#' the simulation results in \insertCite{williams_2021;textual}{GGMncv}
+#' demonstrated that the confidence intervals
+#' can have (severely) compromised coverage properties (whereas non-regularized methods
+#' had coverage at the nominal level).
 #'
 #' @references
 #' \insertAllCited{}
 #'
 #' @examples
 #' # data
-#' Y <- GGMncv::ptsd
+#' Y <- GGMncv::ptsd[,1:5]
 #'
 #' # fit model
-#' fit <- ggmncv(cor(Y), n = nrow(Y))
+#' fit <- ggmncv(cor(Y), n = nrow(Y),
+#'               progress = FALSE,
+#'               penalty = "lasso")
 #'
 #'
 #' # statistical inference
 #' inference(fit)
-#'
-#'
 #' @export
 inference <- function(object,
                       method = "fdr",
@@ -92,11 +105,14 @@ inference <- function(object,
   adj_new[upper.tri(adj_new)] <-  ifelse(corrected_p_values < alpha, 1, 0)
   adj_new[lower.tri(adj_new)] <- t(adj_new)[lower.tri(adj_new)]
 
+  P <- -(cov2cor(Theta) - diag(p))
+  P <- P * adj_new
   # return object
   returned_object <- list(Theta = Theta,
+                          P = P,
                           adj = adj_new,
-                          uncorrect = p_values,
-                          corrected = corrected,
+                          pval_uncorrected = p_values,
+                          pval_corrected = corrected,
                           method = method,
                           alpha = alpha,
                           sds = sds, n = n)
@@ -107,11 +123,27 @@ inference <- function(object,
 }
 
 
-print_inference <- function(x, ... ){
+#' @rdname inference
+#'
+#' @examples
+#'
+#' # alias
+#' all.equal(inference(fit), significance_test(fit))
+#'
+#' @export
+significance_test <- inference
+
+print_inference <- function(x, ...){
+
   cat("Statistical Inference\n")
+
   cat(paste0(x$method, ": ", x$alpha, "\n"))
+
   cat("---\n\n")
-  adj <- as.data.frame( x$adj)
+
+  adj <- as.data.frame(x$adj)
+
   colnames(adj) <- 1:ncol(adj)
+
   print(as.data.frame(adj))
 }
