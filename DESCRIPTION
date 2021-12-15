@@ -1,7 +1,7 @@
 Package: GGMncv
 Type: Package
 Title: Gaussian Graphical Models with Nonconvex Regularization
-Version: 2.1.0
+Version: 2.1.1
 Date: 2021-12-13
 Authors@R: person("Donald", "Williams", email = "drwwilliams@ucdavis.edu", role = c("aut", "cre"))
 Description: Estimate Gaussian graphical models with nonconvex penalties <doi:10.31234/osf.io/ad57p>, 
@@ -31,8 +31,8 @@ RdMacros: Rdpack, mathjaxr
 BugReports: https://github.com/donaldRwilliams/GGMncv/issues
 VignetteBuilder: knitr
 NeedsCompilation: yes
-Packaged: 2021-12-13 12:51:37 UTC; bryce
+Packaged: 2021-12-14 12:42:28 UTC; bryce
 Author: Donald Williams [aut, cre]
 Maintainer: Donald Williams <drwwilliams@ucdavis.edu>
 Repository: CRAN
-Date/Publication: 2021-12-14 08:20:05 UTC
+Date/Publication: 2021-12-15 07:40:28 UTC

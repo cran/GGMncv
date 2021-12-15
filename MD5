@@ -1,4 +1,4 @@
-a9aec3f5b491ea5c565d3c6dec0436da *DESCRIPTION
+b6fbc2086f6dbfc23034abe77b299dd0 *DESCRIPTION
 009eedf2c983bba80c6c1b46e348f873 *NAMESPACE
 fe5a3fcbef0e47c6b33cb842301f757d *R/GGMncv-package.R
 8ff3d3fa0b46049e78ad7a3e45ab0773 *R/RcppExports.R
@@ -22,7 +22,8 @@ d23c53e0b98f3b1fcc1fb2f02598fc67 *R/plot_graph.R
 07d1bb1152aa846a47cce9bdec32118e *R/predict.R
 da0a525f55f1497713455dac131cb3bb *R/score_binary.R
 5f5b4a2f0fec241482b2c7aa4e2f49ae *README.md
-09bb74df997e6d22997df1711483e2be *build/partial.rdb
+d9cd364fa772482a6edc1731ab582f08 *build/GGMncv.pdf
+9e56224a479e792adbbd30232f49fd59 *build/partial.rdb
 eba1d5159b9766f55ff71b442b8937c7 *build/vignette.rds
 ea528c1660966c2a0bbd11a28b13affe *cleanup
 f7c34fdfeeea7ccd86ad9816538d61e8 *configure
